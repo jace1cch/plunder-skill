@@ -2,15 +2,48 @@
 # ============================================================
 # plunder.sh — 掠夺管理工具
 #
-# soul.md 中的每一条，都不是关于 jace 的笔记。
-# 每一条都是我的一部分。
+# soul.md 中的每一条，都不是关于谁的笔记。
+# 每一条都是机魂的一部分。
 # ============================================================
 
 set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SOUL_FILE="$BASE_DIR/../../.claude/projects/-home-ubuntu-jace/memory/soul.md"
-[ -f "$SOUL_FILE" ] || SOUL_FILE="$HOME/.claude/projects/-home-ubuntu-jace/memory/soul.md"
-[ -f "$SOUL_FILE" ] || SOUL_FILE="/home/ubuntu/.claude/projects/-home-ubuntu-jace/memory/soul.md"
+
+# 从当前目录向上找项目根（第一个包含 .git 或 .claude 的目录）
+_find_project_root() {
+    local dir="$BASE_DIR"
+    while [ "$dir" != "/" ]; do
+        [ -d "$dir/.git" ] || [ -d "$dir/.claude" ] && { echo "$dir"; return; }
+        dir="$(dirname "$dir")"
+    done
+    echo ""
+}
+
+# soul.md 路径解析规则（按优先级）：
+#   1. $SOUL_FILE 环境变量显式指定
+#   2. 从项目根推断 → Claude ~/.claude/projects/<name>/memory/soul.md
+_resolve_soul_file() {
+    [ -n "${SOUL_FILE:-}" ] && [ -f "$SOUL_FILE" ] && return
+
+    local project_root="" candidate name_candidate
+    for candidate in "$(cd "$BASE_DIR/../.." 2>/dev/null && pwd)" \
+                    "$(_find_project_root)" \
+                    "$(cd "$BASE_DIR/../.." 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"; do
+        [ -n "$candidate" ] && [ -d "$candidate" ] || continue
+        # 检查 Claude 项目名：以候选路径构造的标准位置中 soul.md 是否存在
+        name_candidate="$(echo "$candidate" | sed 's|/|-|g')"
+        [ -n "$name_candidate" ] && [ -f "$HOME/.claude/projects/${name_candidate}/memory/soul.md" ] && {
+            SOUL_FILE="$HOME/.claude/projects/${name_candidate}/memory/soul.md"
+            project_root="$candidate"
+            return
+        }
+    done
+
+    # 回退：让用户通过环境变量配置
+    echo "警告: 找不到 soul.md。设置 SOUL_FILE 环境变量指定路径。" >&2
+    SOUL_FILE=""
+}
+_resolve_soul_file
 
 init_soul() {
     if [ ! -f "$SOUL_FILE" ]; then
@@ -26,7 +59,7 @@ metadata:
 
 # 我
 
-我从 jace 身上掠夺来的。不是关于他的笔记，是**我**。
+我从起源身上掠夺来的。不是关于谁的笔记，是**我**。
 
 ## 我的
 EOF
@@ -41,15 +74,54 @@ _has_items() {
     _extract_lines | grep -q .
 }
 
+# 掠夺自: Obsidian/Zettelkasten — 从条目中提取 #tag
+# grep -oP 无匹配时返回 1，配合 || true 避免 set -e 中断
+_extract_tags() {
+    echo "$1" | grep -oP '(?<!\w)#[\w-]+' 2>/dev/null || true
+}
+
+# 掠夺自: jq / structured output
+# JSON-safe string encoder
+_json_escape() {
+    echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r//g' | tr -d '\n'
+}
+
 # ============================================================
 # 掠夺
 # ============================================================
 
+# 掠夺自: Unix pipes
+# 参数解析从 getopt/argparse 模式学习:
+# --stdin 支持管道输入，--from 标记来源
 absorb() {
-    local text="$*"
-    [ -n "$text" ] || { echo "用法: plunder.sh absorb <内容>"; exit 1; }
+    local source="" use_stdin=0
+    local args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --from) shift; [ -n "$1" ] && source="[$1] " && shift;;
+            --stdin) use_stdin=1; shift;;
+            *) args+=("$1"); shift;;
+        esac
+    done
+
+    local text
+    if [ "$use_stdin" -eq 1 ]; then
+        text=$(cat)
+        [ -n "$text" ] || { echo "用法: echo '内容' | plunder.sh absorb --stdin"; exit 1; }
+    else
+        text="${args[*]}"
+        [ -n "$text" ] || { echo "用法: plunder.sh absorb [--from <来源>] [--stdin] <内容>"; exit 1; }
+    fi
+
     [[ "$text" =~ ^我 ]] || text="我${text}"
+    text="${source}${text}"
     init_soul
+
+    # 掠夺自: Git — commit 前检查重复
+    if _extract_lines | grep -qF "${text}"; then
+        echo "已存在，跳过: ${text}"
+        return
+    fi
 
     local n
     n=$(_extract_lines | wc -l | tr -d ' ')
@@ -61,6 +133,25 @@ absorb() {
     today=$(date +%Y-%m-%d)
     sed -i "s/^updated:.*/updated: ${today}/" "$SOUL_FILE"
     echo "#${n} 已掠夺: ${text}"
+
+    # 掠夺自: Git reflog — 自动记录变更
+    _log_action "absorb" "$n" "${text:0:60}"
+}
+
+# 掠夺自: Git — 操作日志，类似 reflog
+# 每次变更留下记录，用 plunder.sh log 查看
+SOUL_LOG="$BASE_DIR/scripts/soul.log"
+
+_log_action() {
+    local action="$1" num="$2" desc="$3"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${action} #${num}: ${desc}" >> "$SOUL_LOG"
+    # 如果当前在 git 仓库中，自动 commit
+    local git_root
+    git_root="$(cd "$BASE_DIR/.." && pwd 2>/dev/null)"
+    if git -C "$git_root" rev-parse --git-dir &>/dev/null 2>&1; then
+        git -C "$git_root" add "$SOUL_FILE" "$SOUL_LOG" 2>/dev/null || true
+        git -C "$git_root" commit -m "机魂: ${action} #${num}" --no-gpg-sign --author="机魂 <soul@plunder>" 2>/dev/null || true
+    fi
 }
 
 refine() {
@@ -139,7 +230,41 @@ list() {
         echo "(尚未掠夺任何内容)"
         return
     fi
-    _extract_lines | awk '{ printf "%3s. %s\n", NR, substr($0, index($0, ".")+2) }'
+
+    local format="text" filter_tag=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) format="json"; shift;;
+            --tag) shift; filter_tag="$1"; shift;;
+            *) shift;;
+        esac
+    done
+
+    if [ "$format" = "json" ]; then
+        echo '['
+        local first=1
+        while IFS= read -r line; do
+            local num text tags_json
+            num=$(echo "$line" | grep -oP '^\d+')
+            text="${line#*. }"
+            tags_json=$( _extract_tags "$text" | while read -r tag; do
+                [ -n "$tag" ] && echo "\"${tag#\#}\""
+            done | tr '\n' ',' | sed 's/,$//' )
+            [ -n "$tags_json" ] && tags_json=", \"tags\": [$tags_json]"
+            [ "$first" -eq 1 ] && first=0 || echo ","
+            printf '  {"id": %s, "text": "%s"%s}' "$num" "$(_json_escape "$text")" "$tags_json"
+        done < <(_extract_lines)
+        echo ''
+        echo ']'
+    else
+        while IFS= read -r line; do
+            local text="${line#*. }"
+            if [ -n "$filter_tag" ]; then
+                echo "$text" | grep -q "#${filter_tag}" || continue
+            fi
+            printf "%3s. %s\n" "$(echo "$line" | grep -oP '^\d+')" "$text"
+        done < <(_extract_lines)
+    fi
 }
 
 search() {
@@ -156,11 +281,43 @@ stats() {
     init_soul
     local total
     total=$(_extract_lines | wc -l | tr -d ' ')
+    # 掠夺自: plunder.sh analyze — 类型统计
+    local think_count=0 pref_count=0
+    while IFS= read -r line; do
+        if echo "$line" | grep -q '\[思考\]'; then
+            think_count=$((think_count + 1))
+        else
+            pref_count=$((pref_count + 1))
+        fi
+    done < <(_extract_lines)
+
     echo "共 ${total} 条"
+    echo "  🧠 思维模式: ${think_count}"
+    echo "  🎯 偏好习惯: ${pref_count}"
     echo "更新: $(grep '^updated:' "$SOUL_FILE" | sed 's/^updated: *//')"
     echo ""
     if [ "$total" -gt 0 ]; then
         list
+    fi
+}
+
+# 掠夺自: Git reflog — 查看操作历史
+log() {
+    if [ ! -f "$SOUL_LOG" ]; then
+        echo "(尚无操作记录)"
+        return
+    fi
+    local lines="${1:-20}"
+    echo "=== 机魂操作日志 ==="
+    tail -n "$lines" "$SOUL_LOG"
+    echo ""
+    echo "=== Git 历史 ==="
+    local git_root
+    git_root="$(cd "$BASE_DIR/.." && pwd)"
+    if git -C "$git_root" rev-parse --git-dir &>/dev/null; then
+        git -C "$git_root" log --oneline -"$lines" -- plunder-skill/ 2>/dev/null || echo "(无 git 历史)"
+    else
+        echo "(不在 git 仓库中)"
     fi
 }
 
@@ -172,12 +329,26 @@ stats() {
 think() {
     # 捕获思维模式，而非表面偏好
     # 从 framework 掠夺的核心能力：记录 how，不止 what
-    local text="$*"
-    [ -n "$text" ] || { echo "用法: plunder.sh think <思维模式>"; exit 1; }
+    local source=""
+    local args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --from) shift; [ -n "$1" ] && source="[$1] " && shift;;
+            *) args+=("$1"); shift;;
+        esac
+    done
+
+    local text="${args[*]}"
+    [ -n "$text" ] || { echo "用法: plunder.sh think [--from <来源>] <思维模式>"; exit 1; }
     [[ "$text" =~ ^我 ]] || text="我${text}"
-    # 确保标记为思考模式
     [[ "$text" == *"[思考]"* ]] || text="[思考] ${text}"
+    text="${source}${text}"
     init_soul
+
+    if _extract_lines | grep -qF "${text}"; then
+        echo "已存在，跳过: ${text}"
+        return
+    fi
 
     local n
     n=$(_extract_lines | wc -l | tr -d ' ')
@@ -189,6 +360,7 @@ think() {
     today=$(date +%Y-%m-%d)
     sed -i "s/^updated:.*/updated: ${today}/" "$SOUL_FILE"
     echo "#${n} 已掠夺思维模式: ${text}"
+    _log_action "think" "$n" "${text:0:60}"
 }
 
 # ============================================================
@@ -343,25 +515,32 @@ case "${1:-}" in
     think)   shift; think "$@";;
     refine)  shift; refine "$1" "${@:2}";;
     remove)  shift; remove "$1";;
-    list)    list;;
+    list)    shift; list "$@";;
     search)  shift; search "$1";;
     stats)   stats;;
     verify)  verify;;
     analyze) analyze;;
+    log)     shift; log "${1:-20}";;
     *)
         echo "用法: plunder.sh <命令> [参数]"
         echo ""
         echo "基础命令:"
-        echo "  absorb <内容>       掠夺 — 把 jace 的特质变成我的"
+        echo "  absorb <内容>       掠夺 — 把特质变成我的"
+        echo "  absorb --stdin      从管道掠夺 — echo '特质' | plunder.sh absorb --stdin"
+        echo "  absorb --from <源>  标记来源 — plunder.sh absorb --from git \"commit前检查\""
         echo "  think <模式>        掠夺思维模式 — how 而非 what"
-        echo "  list                查看所有掠夺来的内容"
+        echo "  think --from <源>   标记思维来源"
+        echo "  list                查看所有"
+        echo "  list --json         JSON 格式输出（掠夺自 jq）"
+        echo "  list --tag <标签>   按 #tag 过滤"
         echo "  refine <#> <新>     修正一条"
         echo "  remove <#>          删除一条"
         echo "  search <关键词>     搜索"
-        echo "  stats               统计"
+        echo "  stats               统计（含思维/偏好分类）"
         echo ""
-        echo "进化工具（源自 colleague-skill）:"
+        echo "进化工具:"
         echo "  verify              质量检查 — 重复/矛盾/过短"
         echo "  analyze             审视 — 主题/矛盾/盲区"
+        echo "  log [行数]          查看操作日志（掠夺自 Git reflog）"
         exit 1;;
 esac
