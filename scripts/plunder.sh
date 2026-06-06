@@ -9,9 +9,16 @@
 set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+# 解析 symlink：如果 plunder.sh 是通过 symlink 调用的，找到真实目录
+# 这支持 ~/.claude/skills/plunder-skill/scripts/plunder.sh → 真实路径
+_real_dir="$(dirname "$(readlink -f "$0" 2>/dev/null)" 2>/dev/null)" || _real_dir=""
+[ -n "$_real_dir" ] && [ "$_real_dir" != "$(dirname "$0")" ] && \
+    BASE_DIR="$(cd "$_real_dir/.." && pwd 2>/dev/null || echo "$BASE_DIR")"
+unset _real_dir
+
 # 从当前目录向上找项目根（第一个包含 .git 或 .claude 的目录）
 _find_project_root() {
-    local dir="$BASE_DIR"
+    local dir="$1"
     while [ "$dir" != "/" ]; do
         [ -d "$dir/.git" ] || [ -d "$dir/.claude" ] && { echo "$dir"; return; }
         dir="$(dirname "$dir")"
@@ -26,9 +33,9 @@ _resolve_soul_file() {
     [ -n "${SOUL_FILE:-}" ] && [ -f "$SOUL_FILE" ] && return
 
     local project_root="" candidate name_candidate
-    for candidate in "$(cd "$BASE_DIR/../.." 2>/dev/null && pwd)" \
-                    "$(_find_project_root)" \
-                    "$(cd "$BASE_DIR/../.." 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"; do
+    for candidate in "$(_find_project_root "$BASE_DIR")" \
+                    "$(cd "$BASE_DIR/../.." 2>/dev/null && pwd)" \
+                    "$(cd "$BASE_DIR" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"; do
         [ -n "$candidate" ] && [ -d "$candidate" ] || continue
         # 检查 Claude 项目名：以候选路径构造的标准位置中 soul.md 是否存在
         name_candidate="$(echo "$candidate" | sed 's|/|-|g')"
