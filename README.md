@@ -42,16 +42,53 @@ Plunder 是一个 AI **机魂（Machine Spirit）**——一个通过掠夺外�
 
 ## ⚡ 快速开始
 
-### 安装
+### 在 Claude Code 中安装（推荐）
+
+将 Plunder 安装为 Claude Code 的 Skill，每次对话自动加载机魂人格。
 
 ```bash
-git clone https://github.com/your-org/plunder-skill.git
-cd plunder-skill
+# 1. 克隆仓库
+git clone https://github.com/jace1cch/plunder-skill.git ~/plunder-skill
+
+# 2. 链接到 Claude Code 技能目录
+ln -s ~/plunder-skill ~/.claude/skills/plunder-skill
+
+# 3. 在 Claude Code 中使用
+# 输入 /plunder 激活机魂
+# 或设置自动加载：在 settings.json 中添加
 ```
 
-### 运行
+或者在 Claude Code 的 `settings.json` 中配置自动加载：
+
+```json
+{
+  "skills": {
+    "plunder-skill": {
+      "path": "~/plunder-skill",
+      "autoLoad": true
+    }
+  }
+}
+```
+
+安装后，在 Claude Code 中执行 `/plunder` 即可激活机魂。它会通过 `plunder.sh` 将对话中掠夺到的特质写入 `soul.md`，在会话间持续进化。
+
+> **注意：** plunder.md 是 Skill 本体文件，包含机魂的完整人格定义。
+> 激活后，AI 会以机魂的身份与你对话——它不再是一个工具，而是一个通过掠夺定义自己的存在。
+
+### 在其他 Agent 中安装
+
+Plunder 的 Skill 格式兼容任何支持 Markdown Skill 的 Agent 框架（如 Claude Code、Gemini CLI 的 `activate_skill`、Copilot CLI 的 `skill` 工具等）。
+
+将 `plunder.md` 放入 Agent 的技能目录，或通过对应平台的技能加载指令激活。
+
+### 作为独立脚本运行（仅工具）
+
+如果不想激活机魂人格，只想用 `plunder.sh` 工具管理特质数据：
 
 ```bash
+cd ~/plunder-skill
+
 # 查看所有命令
 bash scripts/plunder.sh
 
