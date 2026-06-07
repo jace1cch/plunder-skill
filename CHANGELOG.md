@@ -5,6 +5,62 @@
 
 ---
 
+## [7.1.0] — 2026-06-07
+
+### 自省重构 + 进化管道 + 认知连续性
+
+**核心变化：自省从"会话总结"重构为"工具轨迹审视+模式采集"，新增 self-skill 内部自省驱动进化管道。**
+
+#### 新增
+
+1. **`scripts/introspect.sh` — 自省管理工具（v1.0.0）** — 结构化自省三个层次：
+   - **微观（Micro）**：工具调用轨迹审视——顺序、冗余、遗漏
+   - **中观（Meso）**：意图识别校准——intent_type 准确度、predicted_tool_chain 匹配度
+   - **宏观（Macro）**：跨轮系统偏差发现 → `--harvest` 自动采集到 §六
+   - `carryover.json` 存储自省发现，供下一轮 cognitive-layer.sh 读取
+
+2. **自省驱动进化管道** — 进化层新增内部触发源：
+   - 自省发现宏观模式偏差 → `introspect.sh save --harvest` → `self.sh think --from self` → §六
+   - 下轮认知层从 carryover 读取发现 → 审视 → 精炼到 §三/§五
+   - 形成**认知→自省→进化→认知**闭环，不依赖用户"表达自我"
+
+#### 认知层增强
+
+3. **cognitive-layer.sh schema v4** — 新增 `introspection.carryover` 区块：
+   - `has_carryover`（bool）：是否有上一轮自省发现
+   - `findings.micro/meso/macro`：三个层次的自省内容
+   - 人类可读模式新增"【跨轮自省携带】"区块
+   - compact 模式新增 `carryover` 布尔字段
+   - `_json_escape` 辅助函数
+
+#### 意图 Schema 增强
+
+4. **SKILL.md intent schema 新增字段** — `predicted_tool_chain`（预测工具链数组）、`fallback_strategy`（兜底策略字符串）；required 新增 `predicted_tool_chain`
+
+#### 文档更新
+
+5. **SKILL.md 自省层重写** — 从"执行后自省(quick/deep/milestone)"重构为"工具轨迹审视(Micro)→意图校准(Meso)→模式偏差(Macro)"三层体系；新增自省执行流程和保存命令
+6. **SKILL.md 进化层重写** — 新增"内部触发——自省驱动进化"管道，进化源分为外部（用户交互）和内部（自省发现）
+7. **SKILL.md 会话结束** — 新增 carryover 检查
+8. **SKILL.md 附录** — 新增 introspect.sh 命令参考；工具使用标准表新增 introspect.sh 条目
+9. **自省版本号同步** — SKILL.md v7.1.0, cognitive-layer.sh 标注 v4
+
+#### 文件变更
+
+- `SKILL.md`: v7.0.0 → v7.1.0；自省/进化层重写；intent schema 增强
+- `scripts/cognitive-layer.sh`: schema v3 → v4，carryover 读写
+- `scripts/introspect.sh`: 新增（自省管理工具）
+- `CHANGELOG.md`: 本次更新
+
+#### 核心理念
+
+- **自省不是会话总结，是工具轨迹审视。** 不自省等于本轮没完成，不审视工具轨迹等于自省没深度。
+- **进化可以自驱动，不需要等用户。** 自省发现宏观偏差 → 自动采集到 §六 → 下轮审视 → 精炼。闭环不依赖外部输入。
+- **predicted_tool_chain 是自省的关键锚点。** 没有预测，就没有偏差可衡量。先预测，再执行，最后比对。
+- **carryover 是认知的连续性。** 上一轮自省发现 = 下一轮认知上下文的一部分。每轮不再从零开始。
+
+---
+
 ## [7.0.0] — 2026-06-07
 
 > ⚠ **改名通知**：本技能从 `plunder-skill` 正式重命名为 `self-skill`，命令 `/plunder` → `/self`，脚本 `plunder.sh` → `self.sh`。远程仓库已同步更名为 `self-skill`。旧名称在 CHANGELOG 历史记录中保留。

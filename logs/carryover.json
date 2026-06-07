@@ -1,0 +1,9 @@
+{
+  "session_id": "20260607-220427",
+  "timestamp": "2026-06-07T22:04:27+08:00",
+  "findings": {
+    "micro": "实际工具链：认知层 → Agent(意图解析) → Bash(定位auto-invoke.md) → Read(查看内容) → Write(重写为禁用状态+注释) → Bash(查找引用方) → Read(settings.json hook) → Edit(hook改为条件注入) → Bash(验证)。比预测多了一步修改hook逻辑，因为不仅要改文件内容还要改注入机制。",
+    "meso": "intent_type=correction，准确。用户反馈'默认不开启'有双重含义：(1)文件内容禁用 (2)注入hook禁用。两者都做了。",
+    "macro": "无新发现的系统性模式偏差。用户明确表达了偏好，已在§六采集。根据进化规则，需要调用 self.sh think/absorb 吸收此偏好。"
+  }
+}

@@ -1,9 +1,11 @@
 #!/bin/bash
 # ============================================================
-# cognitive-layer.sh — 认知层标准化输出 (v3 / v7.0.0)
+# cognitive-layer.sh — 认知层标准化输出 (v4 / v7.1.0)
 #
 # 每次 Claude 加载 self-skill 后，先运行此脚本获取
 # 标准化时空上下文。输出完整的认知上下文基座。
+#
+# v4 新增：跨轮自省携带（carryover）机制
 #
 # 用法：
 #   ./cognitive-layer.sh            输出人类可读格式
@@ -64,12 +66,9 @@ identity_changed="false"
 # --- identity.md 章节检测（供 introspection 使用）---
 section_names=""
 section_six_count=0
-section_six_entries=""
 if [ -f "$identity_file" ]; then
-  # 提取所有 ## 章节目录
   section_names="$(grep -E '^## ' "$identity_file" 2>/dev/null | sed 's/^## //' || echo "")"
 
-  # 提取 §六 条目数
   section_six_count=0
   in_six=0
   while IFS= read -r line; do
@@ -88,8 +87,7 @@ if [ -f "$identity_file" ]; then
   done < "$identity_file"
 fi
 
-# --- project_memory_path 修复 ---
-# Claude Code 项目 ID 规则：绝对路径全部 / 替换为 -
+# --- project_memory_path ---
 project_dir="$(pwd 2>/dev/null || echo "")"
 if [ -n "$project_dir" ]; then
   project_id="$(echo "$project_dir" | sed 's|/|-|g')"
@@ -98,11 +96,44 @@ else
   project_memory_path="N/A"
 fi
 
+# --- 跨轮自省携带 (carryover) ---
+CARRYOVER_FILE="$SKILL_DIR/logs/carryover.json"
+carryover_session=""
+carryover_micro=""
+carryover_meso=""
+carryover_macro=""
+has_carryover="false"
+
+if [ -f "$CARRYOVER_FILE" ] && command -v python3 &>/dev/null; then
+  carryover_data="$(python3 -c "
+import json
+try:
+    with open('$CARRYOVER_FILE') as f:
+        d = json.load(f)
+    sid = d.get('session_id', '')
+    micro = d.get('findings', {}).get('micro', '')
+    meso = d.get('findings', {}).get('meso', '')
+    macro = d.get('findings', {}).get('macro', '')
+    print(f'{sid}|{micro}|{meso}|{macro}')
+except:
+    print('')
+" 2>/dev/null)" || carryover_data=""
+
+  if [ -n "$carryover_data" ]; then
+    IFS='|' read -r carryover_session carryover_micro carryover_meso carryover_macro <<< "$carryover_data"
+    [ -n "$carryover_session" ] && has_carryover="true"
+  fi
+fi
+
+# --- JSON-safe 编码 ---
+_json_escape() {
+    echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r//g' | tr -d '\n'
+}
+
 # --- 读取身份文件摘要 ---
 get_identity_core() {
   local f="$1"
   if [ ! -f "$f" ]; then echo "N/A"; return; fi
-  # 提取 "身份认知" 之后、"我能做什么" 之前的内容
   awk 'BEGIN{found=0}
     /^# 身份认知/ {found=1; next}
     /^## 一/ {found=0}
@@ -117,10 +148,13 @@ case "$MODE" in
   --json|-j)
     identity_core="$(get_identity_core "$identity_file" | tr -d '\n\r' | sed 's/"/\\"/g')"
     section_names_json="$(echo "$section_names" | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}' | tr -d '\n' | sed 's/\\n$//')"
+    carryover_micro_json="$(_json_escape "$carryover_micro")"
+    carryover_meso_json="$(_json_escape "$carryover_meso")"
+    carryover_macro_json="$(_json_escape "$carryover_macro")"
 
     cat << JSONEOF
 {
-  "schema": "cognitive-context-v3",
+  "schema": "cognitive-context-v4",
   "time": {
     "human": "${current_time}（${period}，${weekday_cn}，${timezone}时区）",
     "iso": "${iso_time}",
@@ -144,9 +178,18 @@ case "$MODE" in
     "changed": ${identity_changed}
   },
   "introspection": {
-    "note": "自省层的结构化数据：identity.md 章节结构和§六采集条目数",
+    "note": "自省数据：identity.md 章节结构、§六采集数、上一轮自省发现",
     "sections": "$(echo "$section_names_json")",
-    "section_six_count": ${section_six_count}
+    "section_six_count": ${section_six_count},
+    "carryover": {
+      "has_carryover": ${has_carryover},
+      "session_id": "$(echo "$carryover_session" | sed 's/"/\\"/g')",
+      "findings": {
+        "micro": "${carryover_micro_json}",
+        "meso": "${carryover_meso_json}",
+        "macro": "${carryover_macro_json}"
+      }
+    }
   },
   "project_memory_path": "${project_memory_path}"
 }
@@ -155,14 +198,16 @@ JSONEOF
 
   --compact|-c)
     identity_core="$(get_identity_core "$identity_file" | tr -d '\n\r' | sed 's/"/\\"/g')"
+    carryover_flag="$([ "$has_carryover" = "true" ] && echo 'true' || echo 'false')"
 
-    printf '{"time":"%s","iso":"%s","session":"%s","abnormal":%s,"scope":"ai-self-model","ident":"%s","sixCount":%d}\n' \
+    printf '{"time":"%s","iso":"%s","session":"%s","abnormal":%s,"scope":"ai-self-model","ident":"%s","sixCount":%d,"carryover":%s}\n' \
       "${current_time}（${period}，${weekday_cn}）" \
       "${iso_time}" \
       "$(echo "$session_gap" | sed 's/"/\\"/g')" \
       "$([ "$abnormal_exit" = "无" ] && echo 'false' || echo 'true')" \
       "$identity_core" \
-      "$section_six_count"
+      "$section_six_count" \
+      "$carryover_flag"
     ;;
 
   *)
@@ -183,5 +228,13 @@ JSONEOF
       [ -n "$s" ] && echo "  - $s"
     done
     echo "§六 采集条目：${section_six_count} 条"
+    if [ "$has_carryover" = "true" ]; then
+      echo ""
+      echo "【跨轮自省携带 (上一轮)】"
+      echo "会话: ${carryover_session}"
+      [ -n "$carryover_micro" ] && echo "微观·工具轨迹: ${carryover_micro}"
+      [ -n "$carryover_meso" ]  && echo "中观·意图校准: ${carryover_meso}"
+      [ -n "$carryover_macro" ] && echo "宏观·模式偏差: ${carryover_macro}"
+    fi
     ;;
 esac

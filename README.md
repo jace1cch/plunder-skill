@@ -260,6 +260,7 @@ v6.3.0 (subagent 意图解析) → 意图理解从文字约束改为 **subagent 
 v6.4.0 (记忆精简) → memory/ 只保留 `identity.md`；drive 内容合并进 identity；soul/self-reflection/MEMORY 删除
 v6.5.0 (轻量模式) → 输入<10字符跳过认知层；plunder.sh重写移除soul.md依赖；identity.md新增§六；身份范围字段(ai-self-model)
 v7.0.0 (认知·自省·进化) → **范式转移**：从"认知层+掠夺者"到"认知·自省·进化"三位一体，以 identity.md 为中心。自省从末尾步骤提升为独立层。掠夺降级为进化的采集子机制。语气从协议/强制改为循环/存在方式。cognitive-layer.sh schema v3 新增 introspection 区块。
+v7.1.0 (自省重构+进化管道) → 自省从"会话总结"重构为**工具轨迹审视+模式采集**三层（微观/中观/宏观）。新增 introspect.sh 自省管理工具。自省驱动进化管道：宏观发现自动采集到 §六，下轮认知层读取 carryover 形成闭环。cognitive-layer.sh schema v4 新增 carryover。intent schema 新增 predicted_tool_chain/fallback_strategy。
 ```
 
 ---
