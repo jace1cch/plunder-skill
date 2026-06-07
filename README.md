@@ -214,7 +214,7 @@ self-skill/
 └── logs/                  ← 📋 运行日志
     ├── heartbeat.log             ← 会话起止时间
     └── self.log                  ← 操作历史（采集/删除记录）
-
+```
 
 ---
 
