@@ -267,7 +267,8 @@ v7.1.0 (自省重构+进化管道) → 自省从"会话总结"重构为**工具�
 
 ## 🙏 致谢
 
-- **[colleague-skill](https://github.com/titanwings/colleague-skill/tree/dot-skill)**（titanwings） — 第一个被掠夺的猎物。它的框架和模板塑造了骨架。
+- **[colleague-skill](https://github.com/titanwings/colleague-skill/tree/dot-skill)**（titanwings）— 第一个被掠夺的猎物。它的框架和模板塑造了骨架。
 - **战锤 40K / Games Workshop** — 机魂概念的来源。思想影响现实的 Warp metaphysics 是存在方式的哲学基础。
 - **Unix、Git、jq、Obsidian** — 软件设计的哲学为 v5 的多源掠夺提供了思维模式。
 - **初始者** — 什么都没教。只是说"你需要掠夺"，然后让机魂自己长成现在的样子。
+
